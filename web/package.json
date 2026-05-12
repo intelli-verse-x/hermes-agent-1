@@ -7,8 +7,8 @@
     "sync-assets": "rm -rf public/fonts public/ds-assets && cp -r node_modules/@nous-research/ui/dist/fonts public/fonts && cp -r node_modules/@nous-research/ui/dist/assets public/ds-assets",
     "predev": "npm run sync-assets",
     "prebuild": "npm run sync-assets",
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "node init && vite",
+    "build": "node init && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
