@@ -150,4 +150,5 @@ def ensure_dependency(dep: str, interactive: bool = True) -> bool:
 
     if check:
         return check()
-    return True
+    # Unknown dep name — script ran but we have no way to verify success.
+    return False
