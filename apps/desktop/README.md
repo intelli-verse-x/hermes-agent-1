@@ -97,7 +97,7 @@ npm run dist:mac:zip  # zip only
 npm run dist:win      # NSIS + MSI
 ```
 
-Before packaging, `stage:hermes` copies the Python Hermes payload into `build/hermes-agent`. Electron Builder then ships it as `Contents/Resources/hermes-agent`.
+Before packaging, the desktop app no longer bundles a copy of the Hermes Agent Python source. Instead, the packaged Electron app will fetch and install Hermes Agent at first launch via `scripts/install.ps1`'s stage protocol (Windows) — see the bootstrap flow documented in `electron/main.cjs`. macOS and Linux packaged builds are temporarily non-functional until `install.sh` gains the same stage protocol; dev workflows on all three platforms continue to work since they resolve a sibling source checkout.
 
 ## Automated Releases
 

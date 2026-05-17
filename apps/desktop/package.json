@@ -16,16 +16,15 @@
     "profile:main:cpu": "wait-on http://127.0.0.1:5174 && cross-env XCURSOR_SIZE=24 NODE_OPTIONS=--cpu-prof HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
     "start": "npm run build && electron .",
     "build": "node scripts/assert-root-install.cjs && tsc -b && vite build",
-    "stage:hermes": "node scripts/stage-hermes-payload.mjs",
     "builder": "cross-env NODE_OPTIONS=--max-old-space-size=16384 electron-builder",
-    "pack": "npm run build && npm run stage:hermes && npm run builder -- --dir",
-    "dist": "npm run build && npm run stage:hermes && npm run builder",
-    "dist:mac": "npm run build && npm run stage:hermes && npm run builder -- --mac",
-    "dist:mac:dmg": "npm run build && npm run stage:hermes && npm run builder -- --mac dmg",
-    "dist:mac:zip": "npm run build && npm run stage:hermes && npm run builder -- --mac zip",
-    "dist:win": "npm run build && npm run stage:hermes && npm run builder -- --win",
-    "dist:win:msi": "npm run build && npm run stage:hermes && npm run builder -- --win msi",
-    "dist:win:nsis": "npm run build && npm run stage:hermes && npm run builder -- --win nsis",
+    "pack": "npm run build && npm run builder -- --dir",
+    "dist": "npm run build && npm run builder",
+    "dist:mac": "npm run build && npm run builder -- --mac",
+    "dist:mac:dmg": "npm run build && npm run builder -- --mac dmg",
+    "dist:mac:zip": "npm run build && npm run builder -- --mac zip",
+    "dist:win": "npm run build && npm run builder -- --win",
+    "dist:win:msi": "npm run build && npm run builder -- --win msi",
+    "dist:win:nsis": "npm run build && npm run builder -- --win nsis",
     "test:desktop": "node scripts/test-desktop.mjs",
     "test:desktop:all": "node scripts/test-desktop.mjs all",
     "test:desktop:dmg": "node scripts/test-desktop.mjs dmg",
@@ -138,12 +137,7 @@
       "package.json"
     ],
     "beforeBuild": "scripts/before-build.cjs",
-    "extraResources": [
-      {
-        "from": "build/hermes-agent",
-        "to": "hermes-agent"
-      }
-    ],
+    "extraResources": [],
     "asar": true,
     "afterSign": "scripts/notarize.cjs",
     "asarUnpack": [
