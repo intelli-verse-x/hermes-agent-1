@@ -1475,7 +1475,9 @@ export const en: Translations = {
 
   sidebar: {
     nav: {
+      files: 'Explorer',
       'new-session': 'New session',
+      'source-control': 'Source Control',
       skills: 'Capabilities',
       messaging: 'Messaging',
       artifacts: 'Artifacts'
@@ -1741,7 +1743,7 @@ export const en: Translations = {
       changed: count => `${count} changed`,
       ahead: count => `${count} ahead`,
       behind: count => `${count} behind`,
-      review: 'Review',
+      review: 'Source Control',
       close: 'Close',
       openChanges: 'Open Changes',
       openFile: 'Open File',

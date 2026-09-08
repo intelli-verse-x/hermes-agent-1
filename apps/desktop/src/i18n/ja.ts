@@ -1453,7 +1453,9 @@ export const ja = defineLocale({
 
   sidebar: {
     nav: {
+      files: 'エクスプローラー',
       'new-session': '新しいセッション',
+      'source-control': 'ソース管理',
       skills: 'スキルとツール',
       messaging: 'メッセージング',
       artifacts: 'アーティファクト'

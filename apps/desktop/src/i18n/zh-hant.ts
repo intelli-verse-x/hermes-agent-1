@@ -1406,7 +1406,9 @@ export const zhHant = defineLocale({
 
   sidebar: {
     nav: {
+      files: '檔案總管',
       'new-session': '新工作階段',
+      'source-control': '原始檔控制',
       skills: '技能與工具',
       messaging: '訊息平台',
       artifacts: '成品'

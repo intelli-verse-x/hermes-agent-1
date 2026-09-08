@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import type { ComponentProps } from 'react'
+import { type ComponentProps, useState } from 'react'
 
 import { TreeSkeleton } from '@/components/chat/skeletons'
 import { ErrorBoundary } from '@/components/error-boundary'
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { $panesFlipped } from '@/store/layout'
 import { notifyError } from '@/store/notifications'
 import { setCurrentSessionPreviewTarget } from '@/store/preview'
+import { $projects, $projectScope, $projectTree, activeWorkspaceFolders } from '@/store/projects'
 import { $currentCwd } from '@/store/session'
 
 import { SidebarPanelLabel } from '../shell/sidebar-label'
@@ -29,13 +30,71 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder }: RightSide
   const r = t.rightSidebar
   const panesFlipped = useStore($panesFlipped)
   const currentCwd = useStore($currentCwd).trim()
+  useStore($projectScope)
+  useStore($projects)
+  useStore($projectTree)
 
-  // The file tree is simply "browse the session's working directory". If the
-  // session has a cwd — a repo, a sibling worktree, or any folder — show it. A
-  // bare/detached chat (resolveNewSessionCwd → '') has none, so it shows the
-  // empty hint instead of whatever dir Hermes happens to run from.
-  const hasWorkspace = Boolean(currentCwd)
+  // The file tree is simply "browse the session's working directory". A multi-
+  // folder project shows every root (Cursor-style), not just the primary cwd.
+  const workspaceFolders = activeWorkspaceFolders()
+  const roots = workspaceFolders.length >= 2 ? workspaceFolders : currentCwd ? [currentCwd] : []
+  const hasWorkspace = roots.length > 0
 
+  return (
+    <aside
+      aria-label={r.aria}
+      className={cn(
+        'relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-(--ui-sidebar-surface-background) pt-[calc(var(--titlebar-height)+var(--top-nav-height,0px))] text-(--ui-text-tertiary)',
+        'before:pointer-events-none before:absolute before:top-(--titlebar-height) before:bottom-0 before:z-1 before:w-px before:bg-(--ui-stroke-secondary)',
+        panesFlipped
+          ? 'before:right-0 shadow-[inset_-0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
+          : 'before:left-0 shadow-[inset_0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
+      )}
+    >
+      {hasWorkspace ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {roots.map(root => (
+            <WorkspaceRootTree
+              key={root}
+              compact={roots.length > 1}
+              cwd={root}
+              onActivateFile={onActivateFile}
+              onActivateFolder={onActivateFolder}
+            />
+          ))}
+        </div>
+      ) : (
+        <FilesystemTab
+          canCollapse={false}
+          collapseNonce={0}
+          cwd=""
+          cwdName=""
+          data={[]}
+          error={null}
+          hasWorkspace={false}
+          loading={false}
+          onActivateFile={onActivateFile}
+          onActivateFolder={onActivateFolder}
+          onCollapseAll={() => undefined}
+          onLoadChildren={() => undefined}
+          onNodeOpenChange={() => undefined}
+          onRefresh={() => undefined}
+          openState={{}}
+        />
+      )}
+    </aside>
+  )
+}
+
+function WorkspaceRootTree({
+  compact,
+  cwd,
+  onActivateFile,
+  onActivateFolder
+}: RightSidebarPaneProps & { compact: boolean; cwd: string }) {
+  const { t } = useI18n()
+  const r = t.rightSidebar
+  const [rootOpen, setRootOpen] = useState(false)
   const {
     collapseAll,
     collapseNonce,
@@ -47,15 +106,13 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder }: RightSide
     rootError,
     rootLoading,
     setNodeOpen
-  } = useProjectTree(hasWorkspace ? currentCwd : '')
+  } = useProjectTree(cwd)
 
   const cwdName =
     effectiveCwd
       .split(/[\\/]+/)
       .filter(Boolean)
       .pop() ?? effectiveCwd
-
-  const canCollapse = Object.values(openState).some(Boolean)
 
   const previewFile = async (path: string) => {
     try {
@@ -72,23 +129,15 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder }: RightSide
   }
 
   return (
-    <aside
-      aria-label={r.aria}
-      className={cn(
-        'before:pointer-events-none relative flex h-full w-full min-w-0 flex-col overflow-hidden border-(--ui-stroke-secondary) bg-(--ui-sidebar-surface-background) pt-(--titlebar-height) text-(--ui-text-tertiary)',
-        panesFlipped
-          ? 'border-r shadow-[inset_-0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
-          : 'border-l shadow-[inset_0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
-      )}
-    >
+    <div className={cn('flex min-h-0 flex-col', compact && rootOpen ? 'min-h-32 flex-1' : compact ? 'shrink-0' : 'flex-1')}>
       <FilesystemTab
-        canCollapse={canCollapse}
+        canCollapse={Object.values(openState).some(Boolean)}
         collapseNonce={collapseNonce}
         cwd={effectiveCwd}
         cwdName={cwdName}
         data={data}
         error={rootError}
-        hasWorkspace={hasWorkspace}
+        hasWorkspace
         loading={rootLoading}
         onActivateFile={onActivateFile}
         onActivateFolder={onActivateFolder}
@@ -97,9 +146,11 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder }: RightSide
         onNodeOpenChange={setNodeOpen}
         onPreviewFile={previewFile}
         onRefresh={() => void refreshRoot()}
+        onToggleRoot={() => setRootOpen(open => !open)}
         openState={openState}
+        rootOpen={rootOpen}
       />
-    </aside>
+    </div>
   )
 }
 
@@ -109,6 +160,8 @@ interface FilesystemTabProps extends FileTreeBodyProps {
   hasWorkspace: boolean
   onCollapseAll: () => void
   onRefresh: () => void
+  onToggleRoot?: () => void
+  rootOpen?: boolean
 }
 
 // Sidebar palette + hover-reveal: header actions stay reachable while moving
@@ -134,7 +187,9 @@ function FilesystemTab({
   onNodeOpenChange,
   onPreviewFile,
   onRefresh,
-  openState
+  onToggleRoot,
+  openState,
+  rootOpen = true
 }: FilesystemTabProps) {
   const { t } = useI18n()
   const r = t.rightSidebar
@@ -148,9 +203,14 @@ function FilesystemTab({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <RightSidebarSectionHeader>
-        <div className="flex min-w-0 flex-1">
+        <button
+          className="flex min-w-0 flex-1 items-center gap-1 bg-transparent text-left"
+          onClick={onToggleRoot}
+          type="button"
+        >
+          <Codicon className="shrink-0 text-(--ui-text-quaternary)" name={rootOpen ? 'chevron-down' : 'chevron-right'} size="0.75rem" />
           <SidebarPanelLabel>{cwdName}</SidebarPanelLabel>
-        </div>
+        </button>
         <Button
           aria-label={r.refreshTree}
           className={HEADER_ACTION_LABEL_REVEAL}
@@ -174,6 +234,7 @@ function FilesystemTab({
           <Codicon name="collapse-all" size="0.8125rem" />
         </Button>
       </RightSidebarSectionHeader>
+      {rootOpen ? (
       <FileTreeBody
         collapseNonce={collapseNonce}
         cwd={cwd}
@@ -188,6 +249,7 @@ function FilesystemTab({
         onRetry={onRefresh}
         openState={openState}
       />
+      ) : null}
     </div>
   )
 }

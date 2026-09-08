@@ -148,7 +148,7 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
 
   const threadContentTopPad = secondaryWindow
     ? 'pt-[calc(var(--titlebar-height)+0.75rem)]'
-    : 'pt-[calc(var(--titlebar-height)-0.5rem)]'
+    : 'pt-[calc(var(--titlebar-height)+var(--top-nav-height,0px)-0.5rem)]'
 
   useEffect(() => setThreadAtBottom(isAtBottom), [isAtBottom])
   useEffect(() => () => resetThreadScroll(), [])
