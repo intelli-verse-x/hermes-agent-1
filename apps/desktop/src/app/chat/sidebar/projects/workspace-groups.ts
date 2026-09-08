@@ -76,6 +76,19 @@ const normalizePath = (path: null | string | undefined): string => (path ?? '').
 /** Last path segment. */
 export const baseName = (path: string): string | undefined => segments(path).pop()
 
+/** Chats only — drop branch/worktree lanes so the sidebar is not a git picker. */
+export function flattenRepoSessions(groups: SidebarSessionGroup[]): SessionInfo[] {
+  const byId = new Map<string, SessionInfo>()
+
+  for (const group of groups) {
+    for (const session of group.sessions) {
+      byId.set(session.id, byId.get(session.id) ?? session)
+    }
+  }
+
+  return [...byId.values()].sort((left, right) => (right.last_active ?? 0) - (left.last_active ?? 0))
+}
+
 // The `.worktrees` dir for a KANBAN-TASK worktree path, else null. Only matches
 // task worktrees (`<repo>/.worktrees/t_<hex>`, the `t_…` id kanban_db mints) so
 // the many ephemeral task worktrees collapse into one lane — while user-named

@@ -104,7 +104,7 @@ const initialState: ProjectTreeState = {
 }
 
 const inflight = new Set<string>()
-const $projectTree = atom<ProjectTreeState>(initialState)
+const $projectTrees = atom<Record<string, ProjectTreeState>>({})
 let nextRootRequestId = 0
 let lastConnectionKey = ''
 
@@ -113,14 +113,33 @@ let lastConnectionKey = ''
 // slow cadence so the tree self-heals instead of staying "UNREADABLE" forever.
 const ROOT_ERROR_RETRY_MS = 3_000
 
-function setProjectTree(updater: (current: ProjectTreeState) => ProjectTreeState) {
-  $projectTree.set(updater($projectTree.get()))
+function emptyTree(cwd: string): ProjectTreeState {
+  return { ...initialState, cwd }
 }
 
-function clearProjectTree() {
+function treeFor(cwd: string): ProjectTreeState {
+  return $projectTrees.get()[cwd] ?? emptyTree(cwd)
+}
+
+function setProjectTree(cwd: string, updater: (current: ProjectTreeState) => ProjectTreeState) {
+  if (!cwd) {
+    return
+  }
+
+  const current = treeFor(cwd)
+  const next = updater(current)
+
+  if (next === current) {
+    return
+  }
+
+  $projectTrees.set({ ...$projectTrees.get(), [cwd]: next })
+}
+
+function clearAllProjectTrees() {
   nextRootRequestId += 1
   inflight.clear()
-  $projectTree.set({ ...initialState, requestId: nextRootRequestId })
+  $projectTrees.set({})
 }
 
 /** Sessions record their launch cwd; deleted worktrees and remote-backend
@@ -150,12 +169,10 @@ async function fallbackRootFor(cwd: string): Promise<string | null> {
 
 async function loadRoot(cwd: string, { force = false }: { force?: boolean } = {}) {
   if (!cwd) {
-    clearProjectTree()
-
     return
   }
 
-  const current = $projectTree.get()
+  const current = treeFor(cwd)
 
   if (!force && current.cwd === cwd && (current.loaded || current.rootLoading)) {
     return
@@ -163,23 +180,22 @@ async function loadRoot(cwd: string, { force = false }: { force?: boolean } = {}
 
   const requestId = nextRootRequestId + 1
   nextRootRequestId = requestId
-  inflight.clear()
 
-  if (force || current.cwd !== cwd) {
+  if (force || !current.loaded) {
     clearProjectDirCache(cwd)
   }
 
-  $projectTree.set({
-    collapseNonce: current.collapseNonce,
+  setProjectTree(cwd, latest => ({
+    collapseNonce: latest.collapseNonce,
     cwd,
     data: [],
     loaded: false,
-    openState: current.cwd === cwd ? current.openState : {},
+    openState: latest.cwd === cwd ? latest.openState : {},
     requestId,
     resolvedCwd: '',
     rootError: null,
     rootLoading: true
-  })
+  }))
 
   let resolvedCwd = cwd
   let { entries, error } = await readProjectDir(cwd, cwd)
@@ -198,7 +214,7 @@ async function loadRoot(cwd: string, { force = false }: { force?: boolean } = {}
     }
   }
 
-  setProjectTree(latest => {
+  setProjectTree(cwd, latest => {
     if (latest.cwd !== cwd || latest.requestId !== requestId) {
       return latest
     }
@@ -216,7 +232,7 @@ async function loadRoot(cwd: string, { force = false }: { force?: boolean } = {}
 
 export function resetProjectTreeState() {
   lastConnectionKey = ''
-  clearProjectTree()
+  clearAllProjectTrees()
   clearProjectDirCache()
 }
 
@@ -226,7 +242,7 @@ export function resetProjectTreeState() {
 // the tree, so it's safe to run live as the agent edits — and because node ids
 // (absolute paths) stay stable across merges, rows can animate in/out.
 async function revalidateTree(cwd: string): Promise<void> {
-  const state = $projectTree.get()
+  const state = treeFor(cwd)
 
   if (!cwd || state.cwd !== cwd || !state.loaded) {
     return
@@ -263,7 +279,7 @@ async function revalidateTree(cwd: string): Promise<void> {
 
   const nextData = await reconcile(rootPath, state.data)
 
-  setProjectTree(latest => (latest.cwd === cwd && latest.loaded ? { ...latest, data: nextData } : latest))
+  setProjectTree(cwd, latest => (latest.cwd === cwd && latest.loaded ? { ...latest, data: nextData } : latest))
 }
 
 /**
@@ -274,7 +290,8 @@ async function revalidateTree(cwd: string): Promise<void> {
  * whole tree (used after cwd change or manual refresh).
  */
 export function useProjectTree(cwd: string): UseProjectTreeResult {
-  const state = useStore($projectTree)
+  const trees = useStore($projectTrees)
+  const state = trees[cwd] ?? emptyTree(cwd)
   const connection = useStore($connection)
   const workspaceTick = useStore($workspaceChangeTick)
   const connectionKey = `${connection?.mode || 'local'}:${connection?.profile || ''}:${connection?.baseUrl || ''}`
@@ -283,7 +300,7 @@ export function useProjectTree(cwd: string): UseProjectTreeResult {
 
   const setNodeOpen = useCallback(
     (id: string, open: boolean) => {
-      setProjectTree(current => {
+      setProjectTree(cwd, current => {
         if (current.cwd !== cwd || current.openState[id] === open) {
           return current
         }
@@ -304,7 +321,7 @@ export function useProjectTree(cwd: string): UseProjectTreeResult {
   // the nonce so it remounts with everything collapsed (loaded children stay
   // cached in `data`, just hidden).
   const collapseAll = useCallback(() => {
-    setProjectTree(current => {
+    setProjectTree(cwd, current => {
       if (current.cwd !== cwd) {
         return current
       }
@@ -321,7 +338,7 @@ export function useProjectTree(cwd: string): UseProjectTreeResult {
 
       inflight.add(id)
 
-      setProjectTree(current => {
+      setProjectTree(cwd, current => {
         if (current.cwd !== cwd) {
           return current
         }
@@ -332,12 +349,12 @@ export function useProjectTree(cwd: string): UseProjectTreeResult {
         }
       })
 
-      const rootPath = $projectTree.get().resolvedCwd || cwd
+      const rootPath = treeFor(cwd).resolvedCwd || cwd
       const { entries, error } = await readProjectDir(id, rootPath)
 
       inflight.delete(id)
 
-      setProjectTree(current => {
+      setProjectTree(cwd, current => {
         if (current.cwd !== cwd) {
           return current
         }
@@ -370,6 +387,7 @@ export function useProjectTree(cwd: string): UseProjectTreeResult {
 
     if (connectionChanged) {
       clearProjectDirCache()
+      clearAllProjectTrees()
       void loadRoot(cwd, { force: true })
 
       return
@@ -427,7 +445,7 @@ export function useProjectTree(cwd: string): UseProjectTreeResult {
       openState: state.cwd === cwd ? state.openState : {},
       refreshRoot,
       rootError: state.cwd === cwd ? state.rootError : null,
-      rootLoading: state.cwd === cwd ? state.rootLoading : Boolean(cwd),
+      rootLoading: state.cwd === cwd ? state.rootLoading : false,
       setNodeOpen
     }),
     [

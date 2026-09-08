@@ -1653,7 +1653,9 @@ export const zh: Translations = {
 
   sidebar: {
     nav: {
+      files: '资源管理器',
       'new-session': '新建会话',
+      'source-control': '源代码管理',
       skills: '技能与工具',
       messaging: '消息平台',
       artifacts: '产物'

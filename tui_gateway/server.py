@@ -28,6 +28,10 @@ from utils import is_truthy_value
 from tools.environments.local import hermes_subprocess_env
 from agent.replay_cleanup import sanitize_replay_history
 from tui_gateway import git_probe
+from tui_gateway.workspace_folders import (
+    build_workspace_folders_prompt,
+    resolve_workspace_folders,
+)
 from tui_gateway.transport import (
     StdioTransport,
     Transport,
@@ -3147,6 +3151,7 @@ def _session_info(agent, session: dict | None = None) -> dict:
         "tools": {},
         "skills": {},
         "cwd": cwd,
+        "workspace_folders": list((session or {}).get("workspace_folders") or []),
         "branch": _git_branch_for_cwd(cwd),
         "personality": str(personality or ""),
         "running": bool((session or {}).get("running")),
@@ -4286,6 +4291,22 @@ def _make_agent(
             system_prompt = "\n\n".join(
                 part for part in (system_prompt, skills_prompt) if part
             ).strip()
+    with _sessions_lock:
+        session_row = _sessions.get(sid) or {}
+        workspace_folders = list(session_row.get("workspace_folders") or [])
+        workspace_cwd = str(session_row.get("cwd") or "")
+    if len(workspace_folders) < 2:
+        workspace_folders = resolve_workspace_folders(workspace_folders, workspace_cwd)
+        if workspace_folders:
+            with _sessions_lock:
+                live = _sessions.get(sid)
+                if live is not None:
+                    live["workspace_folders"] = workspace_folders
+    workspace_prompt = build_workspace_folders_prompt(workspace_folders, workspace_cwd)
+    if workspace_prompt:
+        system_prompt = "\n\n".join(
+            part for part in (system_prompt, workspace_prompt) if part
+        ).strip()
     # Prefer a per-session model override (set by a prior in-session /model
     # switch) over global config/env resolution. Resume-time stored sessions may
     # also pass scalar model/provider/runtime knobs from the persisted DB row.
@@ -4926,6 +4947,9 @@ def _(rid, params: dict) -> dict:
     except Exception:
         explicit_cwd = False
     resolved_cwd = _completion_cwd(params)
+    workspace_folders = resolve_workspace_folders(
+        params.get("workspace_folders"), resolved_cwd
+    )
     source = str(params.get("source") or "tui").strip() or "tui"
     _enable_gateway_prompts()
 
@@ -4982,6 +5006,7 @@ def _(rid, params: dict) -> dict:
             "history_version": 0,
             "image_counter": 0,
             "cwd": resolved_cwd,
+            "workspace_folders": workspace_folders,
             "inflight_turn": None,
             "last_active": now,
             "model_override": session_model_override,
@@ -5040,6 +5065,7 @@ def _(rid, params: dict) -> dict:
                 "tools": {},
                 "skills": {},
                 "cwd": _sessions[sid]["cwd"],
+                "workspace_folders": list(_sessions[sid].get("workspace_folders") or []),
                 "branch": _git_branch_for_cwd(_sessions[sid]["cwd"]),
                 "lazy": True,
                 "desktop_contract": DESKTOP_BACKEND_CONTRACT,
@@ -5213,6 +5239,7 @@ def _deferred_session_record(
     lazy: bool = False,
     model_override=None,
     resume_runtime_overrides: dict | None = None,
+    workspace_folders: list | None = None,
 ) -> dict:
     """A live-session record whose AIAgent is built later (lazy watch / cold
     resume) — _init_session's shape minus the agent."""
@@ -5227,6 +5254,7 @@ def _deferred_session_record(
         "cols": cols,
         "created_at": now,
         "cwd": cwd,
+        "workspace_folders": resolve_workspace_folders(workspace_folders, cwd),
         "display_history_prefix": display_history_prefix or [],
         "edit_snapshots": {},
         "explicit_cwd": False,
