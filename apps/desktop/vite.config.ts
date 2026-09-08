@@ -27,7 +27,16 @@ const fsAllow = [
 
 export default defineConfig({
   base: './',
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      name: 'hermes-desktop-auto-reload',
+      handleHotUpdate({ server }) {
+        server.ws.send({ type: 'full-reload' })
+      }
+    }
+  ],
   css: {
     // Pin an explicit (empty) PostCSS config. Tailwind is handled entirely by
     // `@tailwindcss/vite`, so the renderer needs no PostCSS plugins — and
@@ -70,6 +79,10 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5174,
     strictPort: true,
+    watch: {
+      usePolling: process.platform === 'win32',
+      interval: 400
+    },
     fs: {
       allow: fsAllow
     }

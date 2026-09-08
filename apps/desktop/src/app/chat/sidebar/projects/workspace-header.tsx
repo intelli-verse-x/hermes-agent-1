@@ -348,7 +348,7 @@ export function WorkspaceHeader({
   title
 }: {
   action?: React.ReactNode
-  count: React.ReactNode
+  count?: React.ReactNode
   emphasis?: boolean
   icon: React.ReactNode
   label: string
@@ -374,9 +374,11 @@ export function WorkspaceHeader({
       >
         <SidebarRowLead>{icon}</SidebarRowLead>
         <LaneLabel label={label} title={title ? `${label}\n${title}` : label} />
-        <span className="shrink-0">
-          <SidebarCount>{count}</SidebarCount>
-        </span>
+        {count != null && count !== '' ? (
+          <span className="shrink-0">
+            <SidebarCount>{count}</SidebarCount>
+          </span>
+        ) : null}
         <DisclosureCaret
           className="shrink-0 text-(--ui-text-tertiary) opacity-0 transition group-hover/workspace:opacity-100"
           open={open}

@@ -24,6 +24,7 @@ import { SIDEBAR_COLLAPSE_MEDIA_QUERY } from '../layout-constants'
 import { useWindowControlsOverlayWidth } from './hooks/use-window-controls-overlay-width'
 import { KeybindPanel } from './keybind-panel'
 import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
+import { TITLEBAR_LEFT_NAV_COUNT, TOP_NAV_HEIGHT } from './app-nav'
 import { TITLEBAR_HEIGHT, titlebarControlsPosition } from './titlebar'
 import { TitlebarControls, type TitlebarTool } from './titlebar-controls'
 
@@ -45,6 +46,7 @@ interface AppShellProps {
   statusbarItems?: readonly StatusbarItem[]
   terminalPaneOpen?: boolean
   titlebarTools?: readonly TitlebarTool[]
+  topNav?: ReactNode
 }
 
 // Renderer-side fallback so layout snaps even when the main-process fullscreen event
@@ -72,7 +74,8 @@ export function AppShell({
   previewPaneOpen = false,
   statusbarItems,
   terminalPaneOpen = false,
-  titlebarTools
+  titlebarTools,
+  topNav
 }: AppShellProps) {
   const sidebarOpen = useStore($sidebarOpen)
   const fileBrowserOpen = useStore($fileBrowserOpen)
@@ -134,9 +137,9 @@ export function AppShell({
   // between the pane-tool cluster and the system cluster so they don't sit
   // flush against each other. Modeled as N gaps (N - 1 inner + 1 trailing)
   // to keep the formula generic for any pane-tool count.
-  const SYSTEM_TOOL_COUNT = 4
+  const SYSTEM_TOOL_COUNT = 3
   const paneToolCount = titlebarTools?.filter(tool => !tool.hidden).length ?? 0
-  const systemToolsWidth = `calc(${SYSTEM_TOOL_COUNT} * (var(--titlebar-control-size) + 0.25rem))`
+  const systemToolsWidth = `calc(${SYSTEM_TOOL_COUNT} * var(--titlebar-control-size))`
 
   const fileBrowserWidth =
     fileBrowserWidthOverride !== undefined ? `${fileBrowserWidthOverride}px` : FILE_BROWSER_DEFAULT_WIDTH
@@ -169,9 +172,11 @@ export function AppShell({
           // pane track via PaneShell's emitted --pane-chat-sidebar-width.
           '--sidebar-width': 'var(--pane-chat-sidebar-width)',
           '--titlebar-height': `${TITLEBAR_HEIGHT}px`,
+          '--top-nav-height': hideTitlebarControls || !topNav ? '0px' : `${TOP_NAV_HEIGHT}px`,
           '--titlebar-content-inset': `${titlebarContentInset}px`,
           '--titlebar-controls-left': `${titlebarControls.left}px`,
           '--titlebar-controls-top': `${titlebarControls.top}px`,
+          '--titlebar-left-tools-width': `calc(${TITLEBAR_LEFT_NAV_COUNT + (leftTitlebarTools?.filter(tool => !tool.hidden).length ?? 0)} * var(--titlebar-control-size) + 1.5rem)`,
           '--titlebar-tools-right': titlebarToolsRight,
           '--titlebar-tools-width': titlebarToolsWidth,
           // Drops the right rail below the titlebar band when the OS/host paints
@@ -186,13 +191,18 @@ export function AppShell({
       }
     >
       {!hideTitlebarControls && (
-        <TitlebarControls leftTools={leftTitlebarTools} onOpenSettings={onOpenSettings} tools={titlebarTools} />
+        <TitlebarControls
+          leftNav={topNav}
+          leftTools={leftTitlebarTools}
+          onOpenSettings={onOpenSettings}
+          tools={titlebarTools}
+        />
       )}
 
-      {nativeOverlayWidth > 0 && (
+      {!hideTitlebarControls && (
         <div
           aria-hidden
-          className="pointer-events-none fixed right-0 top-0 z-[4] h-(--titlebar-height) w-(--titlebar-tools-right) border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)"
+          className="pointer-events-none fixed inset-x-0 top-0 z-50 h-(--titlebar-height) border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)"
         />
       )}
 
@@ -204,7 +214,7 @@ export function AppShell({
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute top-0 z-1 h-(--titlebar-height) left-[calc(var(--titlebar-controls-left)+(var(--titlebar-control-size)*2)+0.75rem)] right-[calc(var(--titlebar-tools-right)+var(--titlebar-tools-width)+0.75rem)] [-webkit-app-region:drag]"
+            className="pointer-events-none absolute top-0 z-1 h-(--titlebar-height) left-[calc(var(--titlebar-controls-left)+var(--titlebar-left-tools-width,0px))] right-[calc(var(--titlebar-tools-right)+var(--titlebar-tools-width)+0.75rem)] [-webkit-app-region:drag]"
           />
 
           {children}

@@ -2898,9 +2898,15 @@ function createPythonBackend(root, label, backendArgs, options = {}) {
   const python = findPythonForRoot(root)
   if (!python) return null
 
-  const venvRoot = path.join(root, 'venv')
+  const dottedVenv = path.join(root, '.venv')
+  const plainVenv = path.join(root, 'venv')
+  const venvRoot = fileExists(getVenvPython(dottedVenv))
+    ? dottedVenv
+    : fileExists(getVenvPython(plainVenv))
+      ? plainVenv
+      : dottedVenv
   const venvPython = getVenvPython(venvRoot)
-  const command = IS_WINDOWS && fileExists(venvPython) ? venvPython : python
+  const command = fileExists(venvPython) ? venvPython : python
 
   return {
     kind: 'python',
