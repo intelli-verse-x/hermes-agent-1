@@ -4421,11 +4421,20 @@ async function hasLiveOauthSession(baseUrl) {
   }
 }
 
-async function clearOauthSession(baseUrl) {
+async function clearOauthSession(_baseUrl) {
   const sess = getOauthSession()
   if (!sess) return
   try {
-    const cookies = await sess.cookies.get(baseUrl ? { url: baseUrl } : {})
+    // Wipe the whole OAuth partition, not just the gateway host. Privy / Portal
+    // / Google cookies live on other domains; leaving them makes the next
+    // Google pick a "link this account" and Privy rejects it
+    // ("already linked to another user" / "cannot authorize more than one").
+    if (typeof sess.clearStorageData === 'function') {
+      await sess.clearStorageData()
+      return
+    }
+
+    const cookies = await sess.cookies.get({})
     await Promise.all(
       cookies.map(c => {
         const scheme = c.secure ? 'https' : 'http'
@@ -4443,7 +4452,9 @@ async function clearOauthSession(baseUrl) {
 // reject if the user closes the window first. The window navigates through the
 // IDP and back to /auth/callback, which sets the session cookies on the
 // partition; we poll the cookie jar rather than try to read the HttpOnly value.
-function openOauthLoginWindow(baseUrl) {
+async function openOauthLoginWindow(baseUrl) {
+  await clearOauthSession()
+
   return new Promise((resolve, reject) => {
     if (!app.isReady()) {
       reject(new Error('Desktop is not ready to start an OAuth login.'))
