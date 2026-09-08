@@ -118,6 +118,7 @@ import { useSessionActions } from './session/hooks/use-session-actions'
 import { useSessionListActions } from './session/hooks/use-session-list-actions'
 import { useSessionStateCache } from './session/hooks/use-session-state-cache'
 import { AppShell } from './shell/app-shell'
+import { TopNavStrip } from './shell/top-nav-strip'
 import { useOverlayRouting } from './shell/hooks/use-overlay-routing'
 import { useStatusSnapshot } from './shell/hooks/use-status-snapshot'
 import { useStatusbarItems } from './shell/hooks/use-statusbar-items'
@@ -1293,6 +1294,7 @@ export function DesktopController() {
       statusbarItems={statusbarItems}
       terminalPaneOpen={terminalSidebarOpen}
       titlebarTools={titlebarToolGroups.flat.right}
+      topNav={<TopNavStrip onNavigate={selectSidebarItem} />}
     >
       {!isSecondaryWindow() && (
         <Pane

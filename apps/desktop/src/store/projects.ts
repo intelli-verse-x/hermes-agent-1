@@ -11,7 +11,7 @@ import { activeGateway, ensureActiveGatewayOpen } from '@/store/gateway'
 import { setSidebarAgentsGrouped } from '@/store/layout'
 import { notify } from '@/store/notifications'
 import { requestFreshSession } from '@/store/profile'
-import { $selectedStoredSessionId, $sessions, workspaceCwdForNewSession } from '@/store/session'
+import { $currentCwd, $selectedStoredSessionId, $sessions, workspaceCwdForNewSession } from '@/store/session'
 import type { ProjectInfo, ProjectsPayload } from '@/types/hermes'
 
 // First-class, per-profile Projects (named, multi-folder workspaces). State is
@@ -149,6 +149,64 @@ export function resolveNewSessionCwd(): string {
   }
 
   return workspaceCwdForNewSession()
+}
+
+function pushUniquePath(out: string[], seen: Set<string>, raw: null | string | undefined): void {
+  const path = (raw || '').trim().replace(/[/\\]+$/, '')
+
+  if (!path) {
+    return
+  }
+
+  const key = path.toLowerCase()
+
+  if (seen.has(key)) {
+    return
+  }
+
+  seen.add(key)
+  out.push(path)
+}
+
+/** Every folder in the project the new chat is opening under (Cursor-style parent). */
+export function activeWorkspaceFolders(): string[] {
+  const folders: string[] = []
+  const seen = new Set<string>()
+  const cwd = resolveNewSessionCwd() || $currentCwd.get().trim()
+
+  pushUniquePath(folders, seen, cwd)
+
+  const scope = $projectScope.get()
+
+  if (scope === ALL_PROJECTS) {
+    return folders
+  }
+
+  const named = $projects.get().find(project => project.id === scope)
+
+  if (named) {
+    pushUniquePath(folders, seen, named.primary_path)
+
+    const primary = named.folders.find(folder => folder.is_primary) ?? named.folders[0]
+
+    pushUniquePath(folders, seen, primary?.path)
+
+    for (const folder of named.folders) {
+      pushUniquePath(folders, seen, folder.path)
+    }
+  }
+
+  const tree = $projectTree.get().find(node => node.id === scope)
+
+  if (tree) {
+    pushUniquePath(folders, seen, tree.path)
+
+    for (const repo of tree.repos) {
+      pushUniquePath(folders, seen, repo.path)
+    }
+  }
+
+  return folders
 }
 
 const underPath = (parent: string, child: string): boolean =>

@@ -4,8 +4,8 @@ export const TITLEBAR_HEIGHT = 34
 export const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
 export const TITLEBAR_ICON_SIZE = 12
 export const TITLEBAR_CONTROL_OFFSET_X = 74
-export const TITLEBAR_CONTROL_HEIGHT = 22
-export const TITLEBAR_CONTROLS_TOP = (TITLEBAR_HEIGHT - TITLEBAR_CONTROL_HEIGHT) / 2
+export const TITLEBAR_CONTROL_HEIGHT = TITLEBAR_HEIGHT
+export const TITLEBAR_CONTROLS_TOP = 0
 export const TITLEBAR_FALLBACK_WINDOW_BUTTON_X = 24
 // Edge inset used when no left-side native controls take up that space —
 // Windows/Linux (native overlay is on the right) and macOS fullscreen

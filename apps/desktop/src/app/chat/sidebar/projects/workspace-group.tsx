@@ -113,7 +113,7 @@ export function SidebarWorkspaceGroup({ group, renderRows, onNewSession, onRemov
             </div>
           )
         }
-        count={isProfileGroup ? countLabel(visibleSessions.length, totalCount) : group.sessions.length}
+        count={isProfileGroup ? countLabel(visibleSessions.length, totalCount) : undefined}
         icon={leadingIcon}
         label={group.label}
         onToggle={toggleOpen}

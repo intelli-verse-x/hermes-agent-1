@@ -50,7 +50,7 @@ const buttonVariants = cva(
         'icon-sm': 'size-8 rounded-[4px]',
         'icon-lg': 'size-10 rounded-[4px]',
         'icon-titlebar':
-          'h-(--titlebar-control-height) w-(--titlebar-control-size) rounded-[4px] [&_.codicon]:text-[0.875rem]'
+          'h-(--titlebar-control-height) w-(--titlebar-control-size) rounded-none p-0 [&_.codicon]:text-[0.875rem]'
       }
     },
     defaultVariants: {
