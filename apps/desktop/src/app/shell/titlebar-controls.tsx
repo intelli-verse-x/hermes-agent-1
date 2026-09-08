@@ -10,14 +10,6 @@ import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import { $hapticsMuted, toggleHapticsMuted } from '@/store/haptics'
 import { toggleKeybindPanel } from '@/store/keybinds'
-import {
-  $fileBrowserOpen,
-  $panesFlipped,
-  $sidebarOpen,
-  toggleFileBrowserOpen,
-  togglePanesFlipped,
-  toggleSidebarOpen
-} from '@/store/layout'
 
 import { appViewForPath, isOverlayView } from '../routes'
 
@@ -41,20 +33,17 @@ export type TitlebarToolSide = 'left' | 'right'
 export type SetTitlebarToolGroup = (id: string, tools: readonly TitlebarTool[], side?: TitlebarToolSide) => void
 
 interface TitlebarControlsProps extends ComponentProps<'div'> {
+  leftNav?: ReactNode
   leftTools?: readonly TitlebarTool[]
   tools?: readonly TitlebarTool[]
   onOpenSettings: () => void
 }
 
-export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }: TitlebarControlsProps) {
+export function TitlebarControls({ leftNav, leftTools = [], tools = [], onOpenSettings }: TitlebarControlsProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const hapticsMuted = useStore($hapticsMuted)
-  const fileBrowserOpen = useStore($fileBrowserOpen)
-  const sidebarOpen = useStore($sidebarOpen)
-  const panesFlipped = useStore($panesFlipped)
-
   const toggleHaptics = () => {
     if (!hapticsMuted) {
       triggerHaptic('tap')
@@ -67,47 +56,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
     }
   }
 
-  // Each titlebar button controls the pane physically on its side, so a flip
-  // swaps which pane each one toggles. Default: sessions left, file browser
-  // right. Flipped: file browser left, sessions right. Sidebar toggles never
-  // carry an active highlight — they're plain show/hide affordances.
-  const fileBrowserEdge = { open: fileBrowserOpen, toggle: toggleFileBrowserOpen }
-  const sessionsEdge = { open: sidebarOpen, toggle: toggleSidebarOpen }
-  const leftEdge = panesFlipped ? fileBrowserEdge : sessionsEdge
-  const rightEdge = panesFlipped ? sessionsEdge : fileBrowserEdge
-
-  const leftToolbarTools: TitlebarTool[] = [
-    {
-      icon: <Codicon name="layout-sidebar-left" />,
-      id: 'sidebar',
-      label: leftEdge.open ? t.titlebar.hideSidebar : t.titlebar.showSidebar,
-      onSelect: () => {
-        triggerHaptic('tap')
-        leftEdge.toggle()
-      }
-    },
-    {
-      icon: <Codicon name="arrow-swap" />,
-      id: 'flip-panes',
-      label: t.titlebar.swapSidebarSides,
-      onSelect: () => {
-        triggerHaptic('tap')
-        togglePanesFlipped()
-      },
-      title: t.titlebar.swapSidebarSidesTitle
-    },
-    ...leftTools
-  ]
-
-  const rightSidebarTool: TitlebarTool = {
-    icon: <Codicon name="layout-sidebar-right" />,
-    id: 'right-sidebar',
-    label: rightEdge.open ? t.titlebar.hideRightSidebar : t.titlebar.showRightSidebar,
-    onSelect: () => {
-      triggerHaptic('tap')
-      rightEdge.toggle()
-    }
-  }
+  const leftToolbarTools = leftTools
 
   // Static system tools — always pinned to the screen's right edge.
   const systemTools: TitlebarTool[] = [
@@ -153,16 +102,19 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
 
   return (
     <>
-      <div
-        aria-label={t.shell.windowControls}
-        className="fixed left-(--titlebar-controls-left) top-(--titlebar-controls-top) z-70 flex translate-y-0.5 flex-row items-center gap-x-1 pointer-events-auto select-none [-webkit-app-region:no-drag]"
-      >
-        {leftToolbarTools
-          .filter(tool => !tool.hidden)
-          .map(tool => (
-            <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
-          ))}
-      </div>
+      {(leftNav || leftToolbarTools.filter(tool => !tool.hidden).length > 0) && (
+        <div
+          aria-label={t.shell.windowControls}
+          className="pointer-events-auto fixed top-0 left-(--titlebar-controls-left) z-70 flex h-(--titlebar-height) flex-row items-stretch select-none [-webkit-app-region:no-drag]"
+        >
+          {leftNav}
+          {leftToolbarTools
+            .filter(tool => !tool.hidden)
+            .map(tool => (
+              <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
+            ))}
+        </div>
+      )}
 
       {/*
         Pane-scoped tools (preview's monitor / devtools / refresh / X) render
@@ -175,7 +127,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
       {visiblePaneTools.length > 0 && (
         <div
           aria-label={t.shell.paneControls}
-          className="fixed top-[calc(var(--titlebar-controls-top)+var(--right-rail-top-inset,0px))] right-[calc(var(--titlebar-tools-right)+var(--shell-preview-toolbar-gap,0))] z-70 flex flex-row items-center gap-x-1 pointer-events-auto select-none [-webkit-app-region:no-drag]"
+          className="pointer-events-auto fixed top-[var(--right-rail-top-inset,0px)] right-[calc(var(--titlebar-tools-right)+var(--shell-preview-toolbar-gap,0))] z-70 flex h-(--titlebar-height) flex-row items-stretch select-none [-webkit-app-region:no-drag]"
         >
           {visiblePaneTools.map(tool => (
             <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
@@ -185,13 +137,12 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
 
       <div
         aria-label={t.shell.appControls}
-        className="fixed right-(--titlebar-tools-right) top-(--titlebar-controls-top) z-70 flex flex-row items-center justify-end gap-x-1 pointer-events-auto select-none [-webkit-app-region:no-drag]"
+        className="pointer-events-auto fixed top-0 right-(--titlebar-tools-right) z-70 flex h-(--titlebar-height) flex-row items-stretch justify-end select-none [-webkit-app-region:no-drag]"
       >
         {visibleSystemToolsBeforeSettings.map(tool => (
           <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
         ))}
         {settingsTool && <TitlebarToolButton navigate={navigate} tool={settingsTool} />}
-        <TitlebarToolButton navigate={navigate} tool={rightSidebarTool} />
       </div>
     </>
   )

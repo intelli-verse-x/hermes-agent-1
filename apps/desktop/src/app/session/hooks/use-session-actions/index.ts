@@ -10,7 +10,8 @@ import { clearQueuedPrompts } from '@/store/composer-queue'
 import { $pinnedSessionIds } from '@/store/layout'
 import { clearNotifications, notify, notifyError } from '@/store/notifications'
 import { $activeGatewayProfile, $newChatProfile, ensureGatewayProfile, normalizeProfileKey } from '@/store/profile'
-import { resolveNewSessionCwd, tombstoneSessions, untombstoneSessions } from '@/store/projects'
+import { activeWorkspaceFolders, resolveNewSessionCwd, tombstoneSessions, untombstoneSessions } from '@/store/projects'
+import { toggleReview } from '@/store/review'
 import {
   $currentCwd,
   $currentFastMode,
@@ -164,6 +165,7 @@ export function useSessionActions({
         const newChatProfile = $newChatProfile.get() ?? normalizeProfileKey($activeGatewayProfile.get())
         await ensureGatewayProfile(newChatProfile)
         const cwd = $currentCwd.get().trim() || workspaceCwdForNewSession()
+        const workspaceFolders = activeWorkspaceFolders()
         // The composer's model/effort/fast is sticky UI state ($currentModel,
         // $currentProvider, $currentReasoningEffort, $currentFastMode). Ship it
         // with every session.create so the new chat opens on whatever the picker
@@ -177,6 +179,7 @@ export function useSessionActions({
         const created = await requestGateway<SessionCreateResponse>('session.create', {
           cols: 96,
           ...(cwd && { cwd }),
+          ...(workspaceFolders.length > 1 ? { workspace_folders: workspaceFolders } : {}),
           ...(newChatProfile ? { profile: newChatProfile } : {}),
           ...(uiModel ? { model: uiModel, ...(uiProvider ? { provider: uiProvider } : {}) } : {}),
           ...(uiEffort ? { reasoning_effort: uiEffort } : {}),
@@ -250,7 +253,20 @@ export function useSessionActions({
   const selectSidebarItem = useCallback(
     (item: SidebarNavItem) => {
       if (item.action === 'new-session') {
+        $newChatProfile.set(null)
         startFreshSessionDraft()
+
+        return
+      }
+
+      if (item.action === 'source-control') {
+        const cwd = $currentCwd.get().trim() || resolveNewSessionCwd()
+
+        if (cwd) {
+          setCurrentCwd(cwd)
+        }
+
+        toggleReview()
 
         return
       }
@@ -640,9 +656,11 @@ export function useSessionActions({
 
       try {
         // No title: the backend auto-names the branch from its parent's lineage.
+        const workspaceFolders = activeWorkspaceFolders()
         const branched = await requestGateway<SessionCreateResponse>('session.create', {
           cols: 96,
           ...(cwd && { cwd }),
+          ...(workspaceFolders.length > 1 ? { workspace_folders: workspaceFolders } : {}),
           messages: branchMessages.map(({ content, role }) => ({ content, role })),
           ...(parentStoredId && { parent_session_id: parentStoredId })
         })
