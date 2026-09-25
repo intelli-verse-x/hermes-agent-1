@@ -1,19 +1,19 @@
 import { useStore } from '@nanostores/react'
-import { type ComponentProps, useState } from 'react'
+import type { ComponentProps } from 'react'
 
 import { TreeSkeleton } from '@/components/chat/skeletons'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { Tip } from '@/components/ui/tooltip'
 import { useDelayedTrue } from '@/hooks/use-delayed-true'
 import { useI18n } from '@/i18n'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { cn } from '@/lib/utils'
 import { $panesFlipped } from '@/store/layout'
 import { notifyError } from '@/store/notifications'
-import { setCurrentSessionPreviewTarget } from '@/store/preview'
-import { $projects, $projectScope, $projectTree, activeWorkspaceFolders } from '@/store/projects'
-import { $currentCwd } from '@/store/session'
+import { openPreview } from '@/store/preview'
+import { $currentCwd, $selectedStoredSessionId, $workspaceCwdOwner } from '@/store/session'
 
 import { SidebarPanelLabel } from '../shell/sidebar-label'
 
@@ -30,71 +30,14 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder }: RightSide
   const r = t.rightSidebar
   const panesFlipped = useStore($panesFlipped)
   const currentCwd = useStore($currentCwd).trim()
-  useStore($projectScope)
-  useStore($projects)
-  useStore($projectTree)
+  const selectedStoredSessionId = useStore($selectedStoredSessionId)
+  const workspaceCwdOwner = useStore($workspaceCwdOwner)
 
-  // The file tree is simply "browse the session's working directory". A multi-
-  // folder project shows every root (Cursor-style), not just the primary cwd.
-  const workspaceFolders = activeWorkspaceFolders()
-  const roots = workspaceFolders.length >= 2 ? workspaceFolders : currentCwd ? [currentCwd] : []
-  const hasWorkspace = roots.length > 0
+  // A transition intentionally retains the old CWD until the new session
+  // confirms its workspace. Do not issue a filesystem read against that path:
+  // under a gateway switch it may belong to a different remote machine.
+  const hasWorkspace = Boolean(currentCwd) && (workspaceCwdOwner ?? null) === (selectedStoredSessionId ?? null)
 
-  return (
-    <aside
-      aria-label={r.aria}
-      className={cn(
-        'relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-(--ui-sidebar-surface-background) pt-[calc(var(--titlebar-height)+var(--top-nav-height,0px))] text-(--ui-text-tertiary)',
-        'before:pointer-events-none before:absolute before:top-(--titlebar-height) before:bottom-0 before:z-1 before:w-px before:bg-(--ui-stroke-secondary)',
-        panesFlipped
-          ? 'before:right-0 shadow-[inset_-0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
-          : 'before:left-0 shadow-[inset_0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
-      )}
-    >
-      {hasWorkspace ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          {roots.map(root => (
-            <WorkspaceRootTree
-              key={root}
-              compact={roots.length > 1}
-              cwd={root}
-              onActivateFile={onActivateFile}
-              onActivateFolder={onActivateFolder}
-            />
-          ))}
-        </div>
-      ) : (
-        <FilesystemTab
-          canCollapse={false}
-          collapseNonce={0}
-          cwd=""
-          cwdName=""
-          data={[]}
-          error={null}
-          hasWorkspace={false}
-          loading={false}
-          onActivateFile={onActivateFile}
-          onActivateFolder={onActivateFolder}
-          onCollapseAll={() => undefined}
-          onLoadChildren={() => undefined}
-          onNodeOpenChange={() => undefined}
-          onRefresh={() => undefined}
-          openState={{}}
-        />
-      )}
-    </aside>
-  )
-}
-
-function WorkspaceRootTree({
-  compact,
-  cwd,
-  onActivateFile,
-  onActivateFolder
-}: RightSidebarPaneProps & { compact: boolean; cwd: string }) {
-  const { t } = useI18n()
-  const r = t.rightSidebar
-  const [rootOpen, setRootOpen] = useState(false)
   const {
     collapseAll,
     collapseNonce,
@@ -105,14 +48,18 @@ function WorkspaceRootTree({
     refreshRoot,
     rootError,
     rootLoading,
-    setNodeOpen
-  } = useProjectTree(cwd)
+    setNodeOpen,
+    setShowIgnored,
+    showIgnored
+  } = useProjectTree(hasWorkspace ? currentCwd : '')
 
   const cwdName =
     effectiveCwd
       .split(/[\\/]+/)
       .filter(Boolean)
       .pop() ?? effectiveCwd
+
+  const canCollapse = Object.values(openState).some(Boolean)
 
   const previewFile = async (path: string) => {
     try {
@@ -122,22 +69,30 @@ function WorkspaceRootTree({
         throw new Error(r.couldNotPreview(path))
       }
 
-      setCurrentSessionPreviewTarget(preview, 'file-browser', path)
+      openPreview(preview)
     } catch (error) {
       notifyError(error, r.previewUnavailable)
     }
   }
 
   return (
-    <div className={cn('flex min-h-0 flex-col', compact && rootOpen ? 'min-h-32 flex-1' : compact ? 'shrink-0' : 'flex-1')}>
+    <aside
+      aria-label={r.aria}
+      className={cn(
+        'before:pointer-events-none relative flex h-full w-full min-w-0 flex-col overflow-hidden border-(--ui-stroke-secondary) bg-(--ui-sidebar-surface-background) pt-(--titlebar-height) text-(--ui-text-tertiary)',
+        panesFlipped
+          ? 'border-r shadow-[inset_-0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
+          : 'border-l shadow-[inset_0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
+      )}
+    >
       <FilesystemTab
-        canCollapse={Object.values(openState).some(Boolean)}
+        canCollapse={canCollapse}
         collapseNonce={collapseNonce}
         cwd={effectiveCwd}
         cwdName={cwdName}
         data={data}
         error={rootError}
-        hasWorkspace
+        hasWorkspace={hasWorkspace}
         loading={rootLoading}
         onActivateFile={onActivateFile}
         onActivateFolder={onActivateFolder}
@@ -146,11 +101,11 @@ function WorkspaceRootTree({
         onNodeOpenChange={setNodeOpen}
         onPreviewFile={previewFile}
         onRefresh={() => void refreshRoot()}
-        onToggleRoot={() => setRootOpen(open => !open)}
+        onToggleShowIgnored={() => setShowIgnored(!showIgnored)}
         openState={openState}
-        rootOpen={rootOpen}
+        showIgnored={showIgnored}
       />
-    </div>
+    </aside>
   )
 }
 
@@ -160,14 +115,14 @@ interface FilesystemTabProps extends FileTreeBodyProps {
   hasWorkspace: boolean
   onCollapseAll: () => void
   onRefresh: () => void
-  onToggleRoot?: () => void
-  rootOpen?: boolean
+  onToggleShowIgnored: () => void
+  showIgnored: boolean
 }
 
 // Sidebar palette + hover-reveal: header actions stay reachable while moving
 // from the project label to the action buttons.
 const HEADER_ACTION_CLASS =
-  'text-sidebar-foreground/70 hover:bg-sidebar-accent! hover:text-sidebar-accent-foreground! focus-visible:ring-sidebar-ring'
+  'text-sidebar-foreground/70 hover:bg-sidebar-accent! hover:text-sidebar-accent-foreground! focus-visible:bg-sidebar-accent! focus-visible:text-sidebar-accent-foreground! focus-visible:ring-sidebar-ring'
 
 const HEADER_ACTION_LABEL_REVEAL = `${HEADER_ACTION_CLASS} pointer-events-none opacity-0 transition-opacity focus-visible:pointer-events-auto focus-visible:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100`
 
@@ -187,9 +142,9 @@ function FilesystemTab({
   onNodeOpenChange,
   onPreviewFile,
   onRefresh,
-  onToggleRoot,
+  onToggleShowIgnored,
   openState,
-  rootOpen = true
+  showIgnored
 }: FilesystemTabProps) {
   const { t } = useI18n()
   const r = t.rightSidebar
@@ -203,38 +158,48 @@ function FilesystemTab({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <RightSidebarSectionHeader>
-        <button
-          className="flex min-w-0 flex-1 items-center gap-1 bg-transparent text-left"
-          onClick={onToggleRoot}
-          type="button"
-        >
-          <Codicon className="shrink-0 text-(--ui-text-quaternary)" name={rootOpen ? 'chevron-down' : 'chevron-right'} size="0.75rem" />
+        <div className="flex min-w-0 flex-1">
           <SidebarPanelLabel>{cwdName}</SidebarPanelLabel>
-        </button>
-        <Button
-          aria-label={r.refreshTree}
-          className={HEADER_ACTION_LABEL_REVEAL}
-          disabled={loading}
-          onClick={onRefresh}
-          size="icon-xs"
-          title={r.refreshTree}
-          variant="ghost"
-        >
-          <Codicon name="refresh" size="0.8125rem" spinning={loading} />
-        </Button>
-        <Button
-          aria-label={r.collapseAll}
-          className={cn(HEADER_ACTION_CLASS, !canCollapse && 'pointer-events-none opacity-0')}
-          disabled={!canCollapse}
-          onClick={onCollapseAll}
-          size="icon-xs"
-          title={r.collapseAll}
-          variant="ghost"
-        >
-          <Codicon name="collapse-all" size="0.8125rem" />
-        </Button>
+        </div>
+        <Tip label={showIgnored ? r.hideIgnored : r.showIgnored}>
+          <Button
+            aria-label={showIgnored ? r.hideIgnored : r.showIgnored}
+            aria-pressed={showIgnored}
+            // Stays visible while active: the tree is showing more than the
+            // repo does, and that has to be legible without hovering.
+            className={showIgnored ? HEADER_ACTION_CLASS : HEADER_ACTION_LABEL_REVEAL}
+            onClick={onToggleShowIgnored}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <Codicon name={showIgnored ? 'eye' : 'eye-closed'} size="0.8125rem" />
+          </Button>
+        </Tip>
+        <Tip label={r.refreshTree}>
+          <Button
+            aria-label={r.refreshTree}
+            className={HEADER_ACTION_LABEL_REVEAL}
+            disabled={loading}
+            onClick={onRefresh}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <Codicon name="refresh" size="0.8125rem" spinning={loading} />
+          </Button>
+        </Tip>
+        <Tip label={r.collapseAll}>
+          <Button
+            aria-label={r.collapseAll}
+            className={cn(HEADER_ACTION_CLASS, !canCollapse && 'pointer-events-none opacity-0')}
+            disabled={!canCollapse}
+            onClick={onCollapseAll}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <Codicon name="collapse-all" size="0.8125rem" />
+          </Button>
+        </Tip>
       </RightSidebarSectionHeader>
-      {rootOpen ? (
       <FileTreeBody
         collapseNonce={collapseNonce}
         cwd={cwd}
@@ -249,7 +214,6 @@ function FilesystemTab({
         onRetry={onRefresh}
         openState={openState}
       />
-      ) : null}
     </div>
   )
 }
