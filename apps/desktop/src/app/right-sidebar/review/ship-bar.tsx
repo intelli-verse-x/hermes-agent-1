@@ -9,12 +9,14 @@ import { SplitButton } from '@/components/ui/split-button'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { $repoStatus } from '@/store/coding-status'
+import { isSubmitEnter } from '@/lib/ime'
+import { formatCombo } from '@/lib/keybinds/combo'
 import { notifyError } from '@/store/notifications'
 import {
   $reviewCommitDefault,
   $reviewCommitMsgBusy,
   $reviewFiles,
+  $reviewScopeTarget,
   $reviewShipBusy,
   $reviewShipInfo,
   cancelCommitMessage,
@@ -35,44 +37,21 @@ export function ReviewShipBar() {
   const c = t.statusStack.coding
   const files = useStore($reviewFiles)
   const ship = useStore($reviewShipInfo)
+  const scopeTarget = useStore($reviewScopeTarget)
   const busy = useStore($reviewShipBusy)
   const generating = useStore($reviewCommitMsgBusy)
   const commitDefault = useStore($reviewCommitDefault)
-  const repo = useStore($repoStatus)
   const [message, setMessage] = useState('')
   const prLabel = ship.pr?.url ? c.openPr : c.createPr
 
   const hasFiles = files.length > 0
   const canCommit = hasFiles && message.trim().length > 0 && !busy
   const canGenerate = hasFiles && !generating && !busy
-  const branchLabel = repo?.detached ? c.detached : repo?.branch || c.noBranch
 
-  const prButton = (
-    <Tip label={ship.ghReady ? prLabel : c.ghMissing}>
-      <Button
-        aria-label={prLabel}
-        className="size-7 text-muted-foreground/80 hover:text-foreground"
-        disabled={!ship.ghReady || busy}
-        onClick={() => void createOrOpenPr().catch(err => notifyError(err, prLabel))}
-        size="icon-xs"
-        variant="ghost"
-      >
-        <Codicon name="git-pull-request" size={ICON} />
-      </Button>
-    </Tip>
-  )
-
-  // Clean tree: still show the current branch + open/create PR (VS Code / Cursor).
+  // Nothing to commit → no ship bar at all; the pane just shows the tree /
+  // "No changes" state.
   if (!hasFiles) {
-    return (
-      <div className="flex shrink-0 items-center gap-2 px-2.5 py-2" data-suppress-pane-reveal-side="">
-        <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="git-branch" size={ICON} />
-        <span className="min-w-0 flex-1 truncate text-[0.7rem] text-(--ui-text-secondary)" title={branchLabel}>
-          {branchLabel}
-        </span>
-        {prButton}
-      </div>
-    )
+    return null
   }
 
   const runCommit = (action: CommitAction) => {
@@ -107,12 +86,12 @@ export function ReviewShipBar() {
           disabled={generating}
           onChange={event => setMessage(event.target.value)}
           onKeyDown={event => {
-            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+            if ((event.metaKey || event.ctrlKey) && isSubmitEnter(event)) {
               event.preventDefault()
               runCommit(commitDefault)
             }
           }}
-          placeholder={c.commitPlaceholder}
+          placeholder={c.commitPlaceholder(formatCombo('mod+enter'))}
           rows={1}
           size="sm"
           value={message}
@@ -153,7 +132,11 @@ export function ReviewShipBar() {
         <Button
           className="min-w-0 flex-1 justify-center px-7 text-[0.7rem] text-muted-foreground/85 hover:text-foreground"
           disabled={!hasFiles}
-          onClick={() => requestComposerSubmit(c.agentShipPrompt, { target: 'main' })}
+          onClick={() => {
+            if (!requestComposerSubmit(c.agentShipPrompt, { target: scopeTarget })) {
+              notifyError(new Error(c.agentShipUnavailable), c.agentShip)
+            }
+          }}
           size="sm"
           variant="ghost"
         >
